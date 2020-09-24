@@ -29,6 +29,8 @@ module "asg" {
   image_id     = var.lc_image_id
   instance_type = var.lc_type
 
+  ### user details ?? ###
+
   security_groups = [module.vpc.default_security_group_id]
 
   # Auto scaling group
