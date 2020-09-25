@@ -54,10 +54,10 @@ variable "pg_name" {
   default     = "daniele-pg-test"
 }
 
-variable "pg_startegy" {
+variable "pg_strategy" {
   description = "Starategy of PG"
   type        = string
-  default     = "cluster"
+  default     = "partition"
 }
 
 # ASG viables names
@@ -83,13 +83,13 @@ variable "asg_min_size" {
 variable "asg_max_size" {
   description = "ASG instances max size"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "asg_desired_capacity" {
   description = "ASG instances desired capacity"
   type        = number
-  default     = 3
+  default     = 2
 }
 
 variable "asg_grace_period" {
@@ -109,7 +109,7 @@ variable "lt_name" {
 variable "lt_image_id" {
   description = "Name of LT image id"
   type        = string
-  default     = "ami-07dfba995513840b5"
+  default     = "ami-00a205cb8e06c3c4e"
 }
 
 variable "lt_type" {
@@ -131,7 +131,7 @@ variable "lt_key_name" {
 }
 
 # Istance SG viable names
-variable "vpc_name" {
+variable "instance_sg_name" {
   description = "Name of Instance SG"
   type        = string
   default     = "instances-sg"
@@ -156,12 +156,6 @@ variable "instance_sg_ingress_rules" {
 }
 
 # LB SG viables names
-
-variable "lb_sg_version" {
-  description = "LB SG version"
-  type        = string
-  default     = "3.12.0"
-}
 
 variable "lb_sg_description" {
   description = "LB SG description"
@@ -189,4 +183,10 @@ variable "lb_name" {
   description = "Name of LB"
   type        = string
   default     = "danielelb"
+}
+
+variable "lb_type" {
+  description = "Type of LB"
+  type        = string
+  default     = "application"
 }
