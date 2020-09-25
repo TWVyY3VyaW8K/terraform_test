@@ -46,7 +46,22 @@ variable "vpc_tags" {
   }
 }
 
+# Placement group viables names
+
+variable "pg_name" {
+  description = "Name of PG"
+  type        = string
+  default     = "daniele-pg-test"
+}
+
+variable "pg_startegy" {
+  description = "Starategy of PG"
+  type        = string
+  default     = "cluster"
+}
+
 # ASG viables names
+
 variable "asg_name" {
   description = "Name of ASG"
   type        = string
@@ -59,47 +74,60 @@ variable "asg_check_type" {
   default     = "EC2"
 }
 
-variable "min_size" {
-  description = "LC instances min size"
-  type        = int
+variable "asg_min_size" {
+  description = "ASG instances min size"
+  type        = number
   default     = 2
 }
 
-variable "max_size" {
-  description = "LC instances max size"
-  type        = int
+variable "asg_max_size" {
+  description = "ASG instances max size"
+  type        = number
   default     = 2
 }
 
-variable "desired_capacity" {
-  description = "LC instances desired capacity"
-  type        = int
+variable "asg_desired_capacity" {
+  description = "ASG instances desired capacity"
+  type        = number
   default     = 3
 }
 
-variable "capacity_timeout" {
-  description = "LC instances capacity tameout"
-  type        = int
-  default     = 0
+variable "asg_grace_period" {
+  description = "ASG instances grace period"
+  type        = number
+  default     = 300
 }
 
-# Launch configuration names
-variable "lc_name" {
-  description = "Name of LC"
+# Launch template names
+
+variable "lt_name" {
+  description = "Name of LT"
   type        = string
-  default     = "daniele-lc"
+  default     = "daniele-lt"
 }
 
-variable "lc_image_id" {
-  description = "Name of LC image id"
+variable "lt_image_id" {
+  description = "Name of LT image id"
   type        = string
   default     = "ami-07dfba995513840b5"
 }
 
-variable "lc_type" {
-  description = "Name of LC type"
+variable "lt_type" {
+  description = "Name of LT type"
   type        = string
   default     = "t3.micro"
+}
+
+variable "lt_is_ip_addr_public" {
+  description = "Name of LT type"
+  type        = bool
+  default     = true
+}
+
+variable "lt_key_name" {
+  description = "Key name for LT istances"
+  type        = string
+  default     = "sub1_private_key.pem"
 }
 
 # Istance SG viable names
@@ -122,12 +150,13 @@ variable "instance_sg_cidr_blocks" {
 }
 
 variable "instance_sg_ingress_rules" {
-  description = "Description of Instance SG"
+  description = "Instance SG ingress rules"
   type        = list(string)
   default     = ["http-80-tcp"]
 }
 
 # LB SG viables names
+
 variable "lb_sg_version" {
   description = "LB SG version"
   type        = string
@@ -144,4 +173,20 @@ variable "lb_sg_ingress_cidr_blocks" {
   description = "LB SG ingress cidr blocks"
   type        = list(string)
   default     = ["0.0.0.0/0"] # <- da rivedere
+}
+
+# Target groups aviable names
+
+variable "lb_tg_name" {
+  description = "Name of LB TG"
+  type        = string
+  default     = "danielelbtg"
+}
+
+# Load Balancer aviable names
+
+variable "lb_name" {
+  description = "Name of LB"
+  type        = string
+  default     = "danielelb"
 }
