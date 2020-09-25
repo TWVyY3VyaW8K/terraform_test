@@ -4,18 +4,60 @@ provider "aws" {
   region = "eu-central-1"
 }
 
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "2.21.0"
+data "aws_availability_zones" "available" {
+  state = "available"
+}
 
-  name = var.vpc_name
-  cidr = var.vpc_cidr
+resource "aws_vpc" "daniele-vpc" {
+  cidr_block = var.vpc_cidr
+}
 
-  azs             = var.vpc_azs
-  private_subnets = var.vpc_private_subnets
-  public_subnets  = var.vpc_public_subnets
+resource "aws_subnet" "sub1_public" {
+  vpc_id                  = aws_vpc.daniele-vpc.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = true
 
-  enable_nat_gateway = var.vpc_enable_nat_gateway
+  tags = {
+    Name = "sub1_public"
+  }
+}
+
+resource "aws_subnet" "sub2_public" {
+  vpc_id                  = aws_vpc.daniele-vpc.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[1]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "sub2_public"
+  }
+}
+
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.daniele-vpc.id
+
+  tags = {
+    Name = "main"
+  }
+}
+
+resource "aws_route_table" "r" {
+  vpc_id = aws_vpc.daniele-vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+
+  tags = {
+    Name = "main"
+  }
+}
+
+resource "aws_main_route_table_association" "a" {
+  vpc_id         = aws_vpc.daniele-vpc.id
+  route_table_id = aws_route_table.r.id
 }
 
 module "instance_sg" {
@@ -23,24 +65,42 @@ module "instance_sg" {
 
   name        = var.instance_sg_name
   description = var.instance_sg_description
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = aws_vpc.daniele-vpc.id
+  ingress_cidr_blocks  = var.instance_sg_cidr_blocks
+  ingress_rules        = var.instance_sg_ingress_rules
+}
 
-  # ingress_cidr_blocks = var.instance_sg_ingress_cidr_blocks
-  # ingress_rules       = var.instance_sg_ingress_rules
+resource "aws_security_group" "instance_sg" {
+  name        = var.instance_sg_name
+  description = "Allow HTTP inbound traffic"
+  vpc_id      = aws_vpc.daniele-vpc.id
 
+  ingress {
+    description = "HTTP from LB"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = var.instance_sg_cidr_blocks
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = var.instance_sg_cidr_blocks
+  }
+
+  tags = {
+    Name = "allow_http"
+  }
 }
 
 resource "aws_launch_template" "lt" {
   name          = var.lt_name
   image_id      = var.lt_image_id
   instance_type = var.lt_type
-  key_name      = var.lt_key_name
 
-  network_interfaces {
-  associate_public_ip_address = var.lt_is_ip_addr_public
-  }
-
-  vpc_security_group_ids = [module.instance_sg.this_security_group_id]
+  vpc_security_group_ids = [aws_security_group.instance_sg.id]
 
   user_data = filebase64("${path.module}/example.sh")
 }
@@ -50,75 +110,68 @@ resource "aws_placement_group" "pg" {
   strategy = var.pg_strategy
 }
 
+
+resource "aws_lb_target_group" "lb_tg" {
+   name     = var.lb_tg_name
+   port     = 80
+   protocol = "HTTP"
+   vpc_id   = aws_vpc.daniele-vpc.id
+ }
+
 resource "aws_autoscaling_group" "asg" {
   name             = var.asg_name
 
   min_size         = var.asg_min_size
   max_size         = var.asg_max_size
-  desired_capacity = var.desired_capacity
+  desired_capacity = var.asg_desired_capacity
 
   health_check_grace_period = var.asg_grace_period
-  placement_group           = aws_placement_group.test.id
-  vpc_zone_identifier       = module.vpc.public_subnets
+  placement_group           = aws_placement_group.pg.id
+  vpc_zone_identifier       = [aws_subnet.sub1_public.id, aws_subnet.sub2_public.id]
 
   launch_template {
   id      = aws_launch_template.lt.id
   version = "$Latest"
   }
 
+  target_group_arns = ["${aws_lb_target_group.lb_tg.arn}"]
 } 
 
 module "lb_sg" {
-  source  = "terraform-aws-modules/security-group/aws/modules/web"
-  version = var.lb_sg_version
+  source  = "terraform-aws-modules/security-group/aws//modules/web"
+  version = "3.12.0"
 
-  for_each = var.project
-
-  name = "load-balancer-sg-${each.key}-${each.value.environment}"
+  name = "load-balancer-sg"
 
   description = var.lb_sg_description 
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = aws_vpc.daniele-vpc.id
 
   ingress_cidr_blocks = var.lb_sg_ingress_cidr_blocks
 }
 
-# resource "aws_lb_target_group" "lb_tg" {
-#   name     = var.lb_tg_name
-#   port     = 80
-#   protocol = "HTTP"
-#   vpc_id   = module.vpc.vpc_id
-# }
-
-module "elb_http" {
-  source  = "terraform-aws-modules/elb/aws"
-  version = "~> 2.0"
+module "alb_http" {
+  source  = "terraform-aws-modules/alb/aws"
+  version = "~> 5.0"
 
   name = var.lb_name
 
-  subnets         = module.vpc.private_subnet_arns
-  security_groups = [module.lb_sg.this_security_group_id]
-  internal        = false
+  load_balancer_type = var.lb_type
 
-    listener = [
+  vpc_id           = aws_vpc.daniele-vpc.id
+  subnets         = [aws_subnet.sub1_public.id, aws_subnet.sub2_public.id]
+  security_groups = [module.lb_sg.this_security_group_id]
+
+  target_groups = aws_lb_target_group.lb_tg.id
+
+  http_tcp_listeners = [
     {
-      instance_port     = "80"
-      instance_protocol = "HTTP"
-      lb_port           = "80"
-      lb_protocol       = "HTTP"
-    },
-    {
-      instance_port     = "8080"
-      instance_protocol = "http"
-      lb_port           = "8080"
-      lb_protocol       = "http"
-    },
+      port               = 80
+      protocol           = "HTTP"
+      target_group_index = 0
+    }
   ]
 
-  health_check = {
-    target              = "HTTP:80/"
-    interval            = 30
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 5
+  tags = {
+    Environment = "Test"
   }
 }
