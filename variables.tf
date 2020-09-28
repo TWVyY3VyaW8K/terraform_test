@@ -157,6 +157,12 @@ variable "instance_sg_ingress_rules" {
 
 # LB SG viables names
 
+variable "lb_sg_name" {
+  description = "LB SG Name"
+  type        = string
+  default     = "load-balancer-sg"
+}
+
 variable "lb_sg_description" {
   description = "LB SG description"
   type        = string
@@ -182,7 +188,7 @@ variable "lb_tg_name" {
 variable "lb_name" {
   description = "Name of LB"
   type        = string
-  default     = "danielelb"
+  default     = "danielelb2"
 }
 
 variable "lb_type" {
