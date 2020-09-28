@@ -14,7 +14,7 @@ resource "aws_vpc" "daniele-vpc" {
 
 resource "aws_subnet" "sub1_public" {
   vpc_id                  = aws_vpc.daniele-vpc.id
-  cidr_block              = "10.0.1.0/24"
+  cidr_block              = var.vpc_private_subnets[0]
   availability_zone       = data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
 
@@ -25,7 +25,7 @@ resource "aws_subnet" "sub1_public" {
 
 resource "aws_subnet" "sub2_public" {
   vpc_id                  = aws_vpc.daniele-vpc.id
-  cidr_block              = "10.0.2.0/24"
+  cidr_block              = var.vpc_private_subnets[1]
   availability_zone       = data.aws_availability_zones.available.names[1]
   map_public_ip_on_launch = true
 
@@ -66,6 +66,7 @@ module "instance_sg" {
   name        = var.instance_sg_name
   description = var.instance_sg_description
   vpc_id      = aws_vpc.daniele-vpc.id
+
   ingress_cidr_blocks  = var.instance_sg_cidr_blocks
   ingress_rules        = var.instance_sg_ingress_rules
 }
@@ -110,7 +111,6 @@ resource "aws_placement_group" "pg" {
   strategy = var.pg_strategy
 }
 
-
 resource "aws_lb_target_group" "lb_tg" {
    name     = var.lb_tg_name
    port     = 80
@@ -137,11 +137,20 @@ resource "aws_autoscaling_group" "asg" {
   target_group_arns = ["${aws_lb_target_group.lb_tg.arn}"]
 } 
 
+data "aws_instances" "test" {
+  filter {
+    name   = "image-id"
+    values = [var.lt_image_id]
+  }
+
+  depends_on = [aws_autoscaling_group.asg]
+}
+
 module "lb_sg" {
   source  = "terraform-aws-modules/security-group/aws//modules/web"
   version = "3.12.0"
 
-  name = "load-balancer-sg"
+  name = var.lb_sg_name
 
   description = var.lb_sg_description 
   vpc_id      = aws_vpc.daniele-vpc.id
@@ -149,29 +158,38 @@ module "lb_sg" {
   ingress_cidr_blocks = var.lb_sg_ingress_cidr_blocks
 }
 
-module "alb_http" {
-  source  = "terraform-aws-modules/alb/aws"
-  version = "~> 5.0"
-
-  name = var.lb_name
-
-  load_balancer_type = var.lb_type
-
-  vpc_id           = aws_vpc.daniele-vpc.id
-  subnets         = [aws_subnet.sub1_public.id, aws_subnet.sub2_public.id]
+resource "aws_alb" "alb_http" {
+  name            = var.lb_name
+  internal        = false
+  idle_timeout    = "300"
   security_groups = [module.lb_sg.this_security_group_id]
-
-  target_groups = aws_lb_target_group.lb_tg.id
-
-  http_tcp_listeners = [
-    {
-      port               = 80
-      protocol           = "HTTP"
-      target_group_index = 0
-    }
-  ]
-
-  tags = {
-    Environment = "Test"
-  }
+  subnets         = [aws_subnet.sub1_public.id, aws_subnet.sub2_public.id]
 }
+
+resource "aws_alb_listener" "alb_listener" {
+  load_balancer_arn = aws_alb.alb_http.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    target_group_arn = aws_alb_target_group.alb_tg.arn
+    type             = "forward"
+  }
+
+}
+
+resource "aws_alb_target_group" "alb_tg" {
+  name        = var.lb_tg_name
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.daniele-vpc.id
+  target_type = "instance"
+}
+
+resource "aws_alb_target_group_attachment" "test" {
+   count            = var.asg_desired_capacity
+   target_group_arn = aws_alb_target_group.alb_tg.arn
+   target_id        = data.aws_instances.test.ids[count.index]
+   
+   depends_on = [data.aws_instances.test]
+ }
